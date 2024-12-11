@@ -4,6 +4,8 @@ import tensorflow as tf
 import json
 import tree
 import torch
+from torch_geometric.nn import radius_graph
+import torch_geometric as tg
 
 _FEATURE_DESCRIPTION = {
     'position': tf.io.VarLenFeature(tf.string),
@@ -103,11 +105,14 @@ def split_trajectory(context, features, window_length=3):
   # then we can use from_tensor_slices.
 
   trajectory_length = features['position'].get_shape().as_list()[0]
+  print(f'traj len {trajectory_length}')
 
   # We then stack window_length position changes so the final
   # trajectory length will be - window_length +1 (the 1 to make sure we get
   # the last split).
   input_trajectory_length = trajectory_length - window_length + 1
+
+  print(f'inp traj len {input_trajectory_length}')
 
   model_input_features = {}
   # Prepare the context features per step.
@@ -156,13 +161,13 @@ def prepare_inputs(tensor_dict):
   """
   # Position is encoded as [sequence_length, num_particles, dim] but the model
   # expects [num_particles, sequence_length, dim].
-  print(f'prepare {tensor_dict}')
   pos = tensor_dict['position']
   pos = tf.transpose(pos, perm=[1, 0, 2])
 
   # The target position is the final step of the stack of positions.
+  print(f' pos shape {pos.shape}')
   target_position = pos[:, -1]
-
+  print(f' targ shape {target_position.shape}')
   # Remove the target from the input.
   tensor_dict['position'] = pos[:, :-1]
 
@@ -177,6 +182,8 @@ def prepare_inputs(tensor_dict):
     tensor_dict['step_context'] = tensor_dict['step_context'][-2]
     # Add an extra dimension for stacking via concat.
     tensor_dict['step_context'] = tensor_dict['step_context'][tf.newaxis]
+
+  print(f'las td {tensor_dict['position'].shape}')
 
   return tensor_dict, target_position
 
@@ -241,26 +248,34 @@ def input_fn(data_path, mode, split, batch_size):
     # Splits a chunk into input steps and target steps
         ds = ds.map(prepare_inputs)
     return ds
-        # If in train mode, repeat dataset forever and shuffle.
-'''        if mode == 'one_step_train':
-            ds = ds.repeat()
-            ds = ds.shuffle(512)
-        # Custom batching on the leading axis.
-            ds = batch_concat(ds, batch_size)
-        elif mode == 'rollout':
-        # Rollout evaluation only available for batch size 1
-            assert batch_size == 1
-            ds = ds.map(prepare_rollout_inputs)
-        else:
-            raise ValueError(f'mode: {mode} not recognized')'''
     
 
 
 data = input_fn('./metadata.json', 'one_step_train', 'train', 1)
+
+dts =dict()
+dts['labels'] = []
+dts['positions'] = []
+
 for _,dat in enumerate(data):
-    print(f'f {_}')
-    input_data, output_data = dat  # The two dictionaries
-    print(input_data['position'].shape)
-    print(output_data.shape)
-    if _ == 805:
+    if _ == 395:
       break
+    input_data, output_data = dat  # The two dictionaries
+    dts['labels'].append(output_data)
+    dts['positions'].append(input_data)
+
+
+# print(dts['labels'])
+# print(dts['positions'])
+print(dts['positions'][0]['position'][:, -1].shape)
+first_traj_pos = dts['positions'][0]['position'][:, -1].numpy()
+node_feats = np.concatenate([dts['positions'][0]['position'][:, i] for i in range(6)], axis=1)
+print(node_feats.shape)
+
+tens = torch.from_numpy(first_traj_pos)
+
+edge_index = radius_graph(tens, r=0.015)
+
+data = tg.data.Data(x=node_feats, edge_index=edge_index)
+
+print(data)
