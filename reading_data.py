@@ -249,6 +249,8 @@ def input_fn(data_path, mode, split, batch_size):
         ds = ds.map(prepare_inputs)
     return ds
     
+def time_diff(input_sequence):
+  return input_sequence[:, 1:] - input_sequence[:, :-1]
 
 
 data = input_fn('./metadata.json', 'one_step_train', 'train', 1)
@@ -270,7 +272,9 @@ for _,dat in enumerate(data):
 print(dts['positions'][0]['position'][:, -1].shape)
 first_traj_pos = dts['positions'][0]['position'][:, -1].numpy()
 node_feats = np.concatenate([dts['positions'][0]['position'][:, i] for i in range(6)], axis=1)
-print(node_feats.shape)
+vel_seq = time_diff(dts['positions'][0]['position'])
+print(node_feats)
+print(vel_seq)
 
 tens = torch.from_numpy(first_traj_pos)
 
