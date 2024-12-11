@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 import json
 import tree
+import torch
 
 _FEATURE_DESCRIPTION = {
     'position': tf.io.VarLenFeature(tf.string),
@@ -155,6 +156,7 @@ def prepare_inputs(tensor_dict):
   """
   # Position is encoded as [sequence_length, num_particles, dim] but the model
   # expects [num_particles, sequence_length, dim].
+  print(f'prepare {tensor_dict}')
   pos = tensor_dict['position']
   pos = tf.transpose(pos, perm=[1, 0, 2])
 
@@ -175,6 +177,7 @@ def prepare_inputs(tensor_dict):
     tensor_dict['step_context'] = tensor_dict['step_context'][-2]
     # Add an extra dimension for stacking via concat.
     tensor_dict['step_context'] = tensor_dict['step_context'][tf.newaxis]
+
   return tensor_dict, target_position
 
 
@@ -237,8 +240,9 @@ def input_fn(data_path, mode, split, batch_size):
         ds = ds.flat_map(split_with_window)
     # Splits a chunk into input steps and target steps
         ds = ds.map(prepare_inputs)
+    return ds
         # If in train mode, repeat dataset forever and shuffle.
-        if mode == 'one_step_train':
+'''        if mode == 'one_step_train':
             ds = ds.repeat()
             ds = ds.shuffle(512)
         # Custom batching on the leading axis.
@@ -248,23 +252,15 @@ def input_fn(data_path, mode, split, batch_size):
             assert batch_size == 1
             ds = ds.map(prepare_rollout_inputs)
         else:
-            raise ValueError(f'mode: {mode} not recognized')
-    return ds
-
-
-data = input_fn('./metadata.json', 'train', 'train', 1)
-
-for ind, dat in enumerate(data):
-
-    input_data, output_data = dat  # The two dictionaries
-    particle_type = input_data['particle_type']
-    key = input_data['key']
-    position = output_data['position']
+            raise ValueError(f'mode: {mode} not recognized')'''
     
-    # Access or process the data
-    print("Particle Type:", particle_type.numpy().shape)
-    print("Key:", key.numpy())
-    print("Position Shape:", position.shape)
-    print(position[:5, 10:20, :])
-    if ind > 5:
+
+
+data = input_fn('./metadata.json', 'one_step_train', 'train', 1)
+for _,dat in enumerate(data):
+    print(f'f {_}')
+    input_data, output_data = dat  # The two dictionaries
+    print(input_data['position'].shape)
+    print(output_data.shape)
+    if _ == 805:
       break
